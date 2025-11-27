@@ -5,12 +5,15 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const app = express();
 const server = createServer(app);
 const io = new Server(server);
 
-app.use(express.static('public'));
+// Важно: раздаем статические файлы ДО других маршрутов
+app.use(express.static(join(__dirname, 'public')));
 app.use(express.json());
 
 const DATA_FILE = 'data.json';
@@ -39,6 +42,7 @@ let data = loadData();
 // Автозапись каждые 30 секунд
 setInterval(saveData, 30000);
 
+// Главная страница - ДОЛЖНА БЫТЬ ПОСЛЕ static!
 app.get('/', (req, res) => {
     res.sendFile(join(__dirname, 'public', 'index.html'));
 });
@@ -58,7 +62,7 @@ app.post('/register', (req, res) => {
     const user = {
         id: data.userCounter.toString().padStart(5, '0'),
         username: username.startsWith('@') ? username : '@' + username,
-        password: password, // В реальном приложении нужно хэшировать!
+        password: password,
         displayName,
         online: false,
         registered: new Date().toISOString()
@@ -114,7 +118,7 @@ app.post('/create-chat', (req, res) => {
     const chat = {
         id: data.chatCounter.toString().padStart(5, '0'),
         name,
-        type, // 'private', 'group', 'channel'
+        type,
         creatorId,
         members: [creatorId],
         created: new Date().toISOString(),
@@ -141,7 +145,6 @@ io.on('connection', (socket) => {
     
     socket.on('userLogin', (user) => {
         currentUser = user;
-        // Отправляем список чатов пользователя
         const userChats = data.chats.filter(chat => 
             chat.members.includes(user.id) || 
             (chat.type === 'channel' && chat.subscribers.includes(user.id))
@@ -178,7 +181,6 @@ io.on('connection', (socket) => {
         data.messages[chatId].push(message);
         saveData();
         
-        // Отправляем всем в чате
         io.to(chatId).emit('newMessage', message);
     });
     
@@ -195,4 +197,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
+    console.log(`📁 Текущая директория: ${__dirname}`);
 });
